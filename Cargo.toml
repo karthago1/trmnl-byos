@@ -1,0 +1,18 @@
+[package]
+name = "trmnl-byos"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+axum = "0.8.9"
+clap = { version = "4.6.7", features = ["derive"] }
+tokio = { version = "1.54.1", features = ["rt", "rt-multi-thread"] }
+tower-http = { version = "0.7.1", features = ["fs"] }
+trmnl = { version = "0.1.0", features = ["axum"] }
+
+ab_glyph = "0.2.32"
+image = "0.25.10"
+imageproc = "0.27.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
