@@ -5,11 +5,12 @@ use axum::{
     extract::{ConnectInfo, State},
 };
 
+use serde::{Deserialize, Serialize};
 use trmnl::{DeviceInfo, DisplayResponse, LogEntry, LogResponse, SetupResponse};
 
 use crate::{
-    app_state::{AddrInfo, AppState},
-    ui,
+    app_state::{AddrInfo, SharedState},
+    ui::{self, Ui},
 };
 
 /// GET /api/setup - Device registration
@@ -30,7 +31,7 @@ pub async fn setup(
 /// GET /api/display - Main display endpoint
 pub async fn display(
     device: DeviceInfo,
-    State(state): State<AppState>,
+    State(state): State<SharedState>,
     ConnectInfo(addr): ConnectInfo<AddrInfo>,
 ) -> Json<DisplayResponse> {
     // println!(
@@ -44,34 +45,22 @@ pub async fn display(
     // 2. Render to PNG
     // 3. Save the PNG and return its URL
 
-    let mut cmd = std::process::Command::new(format!("{}/{}.sh", state.ui_dir, device.mac_address));
-    match cmd.output() {
-        Ok(output) => {
-            if output.status.success() {
-                let img_name = format!("{}.png", device.mac_address);
-                let img_path = format!("{}/{img_name}", state.img_dir);
-                let ui_path = format!("{}/{}.json", state.ui_dir, device.mac_address);
+    match state.lock() {
+        Ok(mut state) => {
+            let img_name = format!("{}.png", device.mac_address);
+            let img_path = format!("{}/{img_name}", state.img_dir);
+            let _ = state.data.insert(
+                "battery".to_string(),
+                device.battery_percentage().unwrap_or_default().to_string(),
+            );
+            let res = ui::render_ui(&img_path, &state.ui, state.data.clone());
 
-                let result = serde_json::from_slice(&output.stdout).map(
-                    |mut data: HashMap<String, String>| {
-                        let _ = data.insert(
-                            "battery".to_string(),
-                            device.battery_percentage().unwrap_or_default().to_string(),
-                        );
-                        ui::render_ui(&img_path, &ui_path, data)
-                    },
-                );
-                println!("result {result:?}");
-                let img_url = format!("http://{}/img/{img_name}", addr.local);
-                return Json(DisplayResponse::new(img_url, img_name).with_refresh_rate(60));
-            } else {
-                println!("display: status {}", output.status);
-                // TODO show error
-            }
+            println!("result {res:?}");
+            let img_url = format!("http://{}/img/{img_name}", addr.local);
+            return Json(DisplayResponse::new(img_url, img_name).with_refresh_rate(60));
         }
-        Err(error) => {
-            println!("display: {error}");
-            // TODO show error
+        Err(err) => {
+            println!("display: {err}");
         }
     }
 
@@ -98,4 +87,42 @@ pub async fn log(device: DeviceInfo, Json(entry): Json<LogEntry>) -> Json<LogRes
     );
 
     Json(LogResponse::ok())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateImageResponse {
+    /// Status code (0 = success)
+    pub status: u32,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateImageReq {
+    pub ui: Ui,
+    pub data: HashMap<String, String>,
+    pub refresh_time_s: u32,
+}
+
+/// POST /api/update_image
+pub async fn update_image(
+    State(state): State<SharedState>,
+    Json(req): Json<UpdateImageReq>,
+) -> Json<UpdateImageResponse> {
+    let res = match state.lock() {
+        Ok(mut state) => {
+            state.ui = req.ui;
+            state.data = req.data;
+            state.refresh_time_s = req.refresh_time_s;
+
+            UpdateImageResponse {
+                status: 1,
+                error: None,
+            }
+        }
+        Err(err) => UpdateImageResponse {
+            status: 1,
+            error: Some(err.to_string()),
+        },
+    };
+    Json(res)
 }

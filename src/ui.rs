@@ -1,4 +1,4 @@
-use std::{cell::OnceCell, collections::HashMap, fs::File};
+use std::{cell::OnceCell, collections::HashMap};
 
 use ab_glyph::{FontRef, PxScale};
 use image::{Pixel, Rgb, RgbImage};
@@ -10,7 +10,7 @@ use imageproc::{
 use serde::{Deserialize, Serialize};
 
 #[derive(clap::Args, Deserialize, Clone, Debug)]
-struct Size {
+pub struct Size {
     /// width of the image
     #[arg(short, long, default_value_t = 800)]
     width: u32,
@@ -20,7 +20,7 @@ struct Size {
 }
 
 #[derive(Deserialize, Clone, Copy, Debug, Serialize)]
-enum Value {
+pub enum Value {
     Relative(f64),
     Absolute(u32),
     Min,
@@ -41,13 +41,13 @@ impl Value {
 }
 
 #[derive(Deserialize, Clone, Debug, Serialize)]
-struct Position {
+pub struct Position {
     x: Value,
     y: Value,
 }
 
 #[derive(Deserialize, Clone, Debug)]
-struct Text {
+pub struct Text {
     pub text: String,
     #[serde(flatten)]
     pub pos: Position,
@@ -55,7 +55,7 @@ struct Text {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-struct Line {
+pub struct Line {
     pub p1: Position,
     pub p2: Position,
 }
@@ -73,7 +73,7 @@ impl Line {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-struct Rectangle {
+pub struct Rectangle {
     #[serde(flatten)]
     pub pos: Position,
     pub width: Value,
@@ -92,7 +92,7 @@ impl Rectangle {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-struct Section {
+pub struct Section {
     #[serde(flatten)]
     pub pos: Position,
     height: Value,
@@ -114,13 +114,13 @@ impl Section {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-enum Item {
+pub enum Item {
     Text(Text),
     Rectangle(Rectangle),
 }
 
 #[derive(Clone, Debug)]
-struct Area {
+pub struct Area {
     x: u32,
     y: u32,
     height: u32,
@@ -128,12 +128,12 @@ struct Area {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-struct Ui {
-    width: u32,
-    height: u32,
-    sections: Vec<Section>,
+pub struct Ui {
+    pub width: u32,
+    pub height: u32,
+    pub sections: Vec<Section>,
     #[serde(default)]
-    rectangles: Vec<Rectangle>,
+    pub rectangles: Vec<Rectangle>,
 }
 
 impl Position {
@@ -182,18 +182,13 @@ const FONT_BYTE: &[u8] = include_bytes!(
     "../data/3270NerdFont-Regular.ttf" // "/usr/share/fonts/open-sans/OpenSans-Regular.ttf"
 );
 
-pub fn render_ui(
-    img_dst: &String,
-    ui_json_path: &String,
-    data: HashMap<String, String>,
-) -> anyhow::Result<()> {
+pub fn render_ui(img_dst: &String, ui: &Ui, data: HashMap<String, String>) -> anyhow::Result<()> {
     let font_cell = OnceCell::new();
     let font = font_cell.get_or_init(|| {
         println!("font initialized");
         FontRef::try_from_slice(FONT_BYTE).expect("failed to parse font")
     });
 
-    let ui: Ui = serde_json::from_reader(File::open(ui_json_path)?)?;
     let mut image = RgbImage::new(ui.width, ui.height);
     image.fill(255u8);
 
@@ -206,7 +201,7 @@ pub fn render_ui(
 
     let brush = Rgb([0u8, 0u8, 0u8]);
 
-    for section in ui.sections {
+    for section in ui.sections.iter() {
         let area = section.to_area(&area);
         println!("area to draw {area:?}");
         for item in section.items.iter() {
@@ -224,7 +219,7 @@ pub fn render_ui(
         }
     }
 
-    for rectangle in ui.rectangles {
+    for rectangle in ui.rectangles.iter() {
         let rect = rectangle.get(&area);
         if rectangle.fill {
             draw_filled_rect_mut(&mut image, rect, brush);

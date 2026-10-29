@@ -9,14 +9,17 @@ mod api;
 mod app_state;
 mod ui;
 
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::{
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    sync::{Arc, Mutex},
+};
 
 use axum::{Router, routing::get};
 use clap::Parser;
 use tower_http::services::ServeDir;
 
 use crate::{
-    api::{display, log, setup},
+    api::{display, log, setup, update_image},
     app_state::{AddrInfo, AppState},
 };
 
@@ -27,9 +30,8 @@ struct Args {
 
     #[arg(short, long, default_value_t = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED , 3000)))]
     addr: SocketAddr,
-
-    /// path to the ui directory, the dir should contain [MAC_ADDRESS].sh and [MAC_ADDRESS].json
-    ui_dir: String,
+    // /// path to the ui directory, the dir should contain [MAC_ADDRESS].sh and [MAC_ADDRESS].json
+    // ui_dir: String,
 }
 
 #[tokio::main]
@@ -51,10 +53,8 @@ async fn main() {
         .route("/api/setup", get(setup))
         .route("/api/display", get(display))
         .route("/api/log", axum::routing::post(log))
-        .with_state(AppState {
-            img_dir: args.img_dir.clone(),
-            ui_dir: args.ui_dir,
-        })
+        .route("/api/update_image", axum::routing::post(update_image))
+        .with_state(Arc::new(Mutex::new(AppState::new(args.img_dir.clone()))))
         .nest_service("/img", ServeDir::new(args.img_dir));
 
     let listener = tokio::net::TcpListener::bind(args.addr).await.unwrap();
