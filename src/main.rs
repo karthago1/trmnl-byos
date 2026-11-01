@@ -10,6 +10,7 @@ mod app_state;
 mod ui;
 
 use std::{
+    fs::File,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     sync::{Arc, Mutex},
 };
@@ -20,14 +21,22 @@ use clap::Parser;
 use crate::{
     api::{display, download, log, setup, update_image},
     app_state::{AddrInfo, AppState},
+    ui::Ui,
 };
 
 #[derive(Parser, Debug)]
 struct Args {
     #[arg(short, long, default_value_t = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED , 3000)))]
     addr: SocketAddr,
-    // /// path to the ui directory, the dir should contain [MAC_ADDRESS].sh and [MAC_ADDRESS].json
-    // ui_dir: String,
+    /// path to the ui file to convert it to image. for testing
+    ui: Option<String>,
+}
+
+fn convert_ui_to_image(ui: &str) -> anyhow::Result<()> {
+    let ui: Ui = serde_json::from_reader(File::open(ui)?)?;
+    let bmp = ui::render_ui(&ui, Default::default())?;
+    std::fs::write("output.png", &bmp)?;
+    Ok(())
 }
 
 #[tokio::main]
@@ -43,6 +52,10 @@ async fn main() {
     println!("  curl -H 'ID: test-device' http://localhost:3000/api/display");
 
     let args = Args::parse();
+
+    if let Some(ui) = args.ui {
+        return convert_ui_to_image(&ui).expect("faile to convert image");
+    }
 
     let app = Router::new()
         .route("/api/setup", get(setup))
