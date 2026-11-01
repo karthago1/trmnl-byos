@@ -171,7 +171,7 @@ pub fn create_img(
             .data
             .insert("battery".to_string(), battery.to_string());
     }
-    state.image = ui::render_ui(&state.ui, std::mem::take(&mut state.data))?;
+    state.image = ui::render_ui(&state.ui, state.data.clone())?;
 
     state.image_name = img_name.clone();
 
