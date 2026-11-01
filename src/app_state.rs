@@ -5,23 +5,28 @@ use std::{
 };
 
 use axum::{extract::connect_info::Connected, serve::IncomingStream};
-use serde::Deserialize;
 use tokio::net::TcpListener;
 
 use crate::ui::Ui;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AppState {
     pub ui: Ui,
     pub data: HashMap<String, String>,
-    pub img_dir: String,
     pub refresh_time_s: u32,
+    pub image: Vec<u8>,
+    pub welcome_image: Vec<u8>,
+    pub image_name: String,
+    pub welcome_image_name: String,
 }
 impl AppState {
-    pub fn new(img_dir: String) -> Self {
+    pub fn new() -> Self {
         Self {
+            welcome_image: Vec::new(),
+            welcome_image_name: String::new(),
+            image_name: String::new(),
+            image: Vec::new(),
             refresh_time_s: 60,
-            img_dir,
             ui: Ui {
                 width: 800,
                 height: 480,

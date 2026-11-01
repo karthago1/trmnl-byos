@@ -1,5 +1,10 @@
-use std::{cell::OnceCell, collections::HashMap};
+use std::{
+    cell::OnceCell,
+    collections::HashMap,
+    io::{BufWriter, Cursor},
+};
 
+use ::png::{BitDepth, ColorType, Encoder};
 use ab_glyph::{FontRef, PxScale};
 use image::{Pixel, Rgb, RgbImage};
 use imageproc::{
@@ -8,6 +13,8 @@ use imageproc::{
     rect::Rect,
 };
 use serde::{Deserialize, Serialize};
+
+const FONT_BYTE: &[u8] = include_bytes!("../data/0xProtoNerdFont-Regular.ttf");
 
 #[derive(clap::Args, Deserialize, Clone, Debug)]
 pub struct Size {
@@ -42,8 +49,8 @@ impl Value {
 
 #[derive(Deserialize, Clone, Debug, Serialize)]
 pub struct Position {
-    x: Value,
-    y: Value,
+    pub x: Value,
+    pub y: Value,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -95,9 +102,9 @@ impl Rectangle {
 pub struct Section {
     #[serde(flatten)]
     pub pos: Position,
-    height: Value,
-    width: Value,
-    items: Vec<Item>,
+    pub height: Value,
+    pub width: Value,
+    pub items: Vec<Item>,
 }
 impl Section {
     fn to_area(&self, area: &Area) -> Area {
@@ -178,11 +185,7 @@ fn draw_text<C>(
     draw_text_mut(image, brush, x as i32, y as i32, scale, &font, &text);
 }
 
-const FONT_BYTE: &[u8] = include_bytes!(
-    "../data/3270NerdFont-Regular.ttf" // "/usr/share/fonts/open-sans/OpenSans-Regular.ttf"
-);
-
-pub fn render_ui(img_dst: &String, ui: &Ui, data: HashMap<String, String>) -> anyhow::Result<()> {
+pub fn render_ui(ui: &Ui, data: HashMap<String, String>) -> anyhow::Result<Vec<u8>> {
     let font_cell = OnceCell::new();
     let font = font_cell.get_or_init(|| {
         println!("font initialized");
@@ -234,6 +237,52 @@ pub fn render_ui(img_dst: &String, ui: &Ui, data: HashMap<String, String>) -> an
     //     draw_line_segment_mut(&mut image, start, end, brush);
     // }
 
-    image.save(img_dst)?;
-    Ok(())
+    save_monochrome_png(&image)
+}
+
+fn save_monochrome_png(img: &RgbImage) -> anyhow::Result<Vec<u8>> {
+    let width = img.width();
+    let height = img.height();
+
+    // Each row contains 1 bit per pixel.
+    // PNG rows are padded to a whole number of bytes.
+    let row_bytes = (width as usize + 7) / 8;
+
+    let mut packed = vec![0u8; row_bytes * height as usize];
+
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = img.get_pixel(x, y);
+
+            let byte_index = y as usize * row_bytes + (x / 8) as usize;
+
+            let bit_index = 7 - (x % 8);
+
+            // PNG 1-bit grayscale:
+            // 0 = black
+            // 1 = white
+            //
+            // Set the bit for white pixels.
+
+            let sum: usize = pixel.0.iter().map(|v| *v as usize).sum();
+            if sum >= (128 * 3) {
+                packed[byte_index] |= 1 << bit_index;
+            }
+        }
+    }
+
+    let mut buf = Vec::<u8>::new();
+    let buffer = Cursor::new(&mut buf);
+    let writer = BufWriter::new(buffer);
+
+    let mut encoder = Encoder::new(writer, width, height);
+
+    encoder.set_color(ColorType::Grayscale);
+    encoder.set_depth(BitDepth::One);
+
+    let mut png_writer = encoder.write_header()?;
+    png_writer.write_image_data(&packed)?;
+    png_writer.finish()?;
+
+    Ok(buf)
 }
