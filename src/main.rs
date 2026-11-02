@@ -33,8 +33,8 @@ struct Args {
 }
 
 fn convert_ui_to_image(ui: &str) -> anyhow::Result<()> {
-    let ui: Ui = serde_json::from_reader(File::open(ui)?)?;
-    let bmp = ui::render_ui(&ui, Default::default())?;
+    let mut ui: Ui = serde_json::from_reader(File::open(ui)?)?;
+    let bmp = ui::render_ui(&mut ui, Default::default())?;
     std::fs::write("output.png", &bmp)?;
     Ok(())
 }
@@ -54,7 +54,7 @@ async fn main() {
     let args = Args::parse();
 
     if let Some(ui) = args.ui {
-        return convert_ui_to_image(&ui).expect("faile to convert image");
+        return convert_ui_to_image(&ui).expect("failed to convert image");
     }
 
     let app = Router::new()

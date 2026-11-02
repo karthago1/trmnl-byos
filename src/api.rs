@@ -12,7 +12,7 @@ use trmnl::{DeviceInfo, LogEntry, LogResponse};
 
 use crate::{
     app_state::{AddrInfo, AppState, SharedState},
-    ui::{self, Item, Position, Section, Ui, Value},
+    ui::{self, Position, Section, Text, Ui, Value},
 };
 
 /// Response for GET /api/setup endpoint.
@@ -114,7 +114,7 @@ pub async fn setup(
     let mut state = state.lock().expect("setup. fauled to lock");
 
     if state.welcome_image_name.is_empty() {
-        let ui = Ui {
+        let mut ui = Ui {
             width: 800,
             height: 480,
             rectangles: Vec::new(),
@@ -125,17 +125,20 @@ pub async fn setup(
                 },
                 height: Value::Relative(1.),
                 width: Value::Relative(1.),
-                items: vec![Item::Text(ui::Text {
-                    text: "Welcome to my home".to_string(),
-                    pos: Position {
-                        x: Value::Center,
-                        y: Value::Center,
-                    },
-                    size: 60.,
-                })],
+                items: vec![
+                    Text::new(
+                        "Welcome to my home".to_string(),
+                        Position {
+                            x: Value::Center,
+                            y: Value::Center,
+                        },
+                        60.,
+                    )
+                    .into(),
+                ],
             }],
         };
-        state.welcome_image = ui::render_ui(&ui, Default::default()).expect("failed to ŕender");
+        state.welcome_image = ui::render_ui(&mut ui, Default::default()).expect("failed to ŕender");
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -171,7 +174,7 @@ pub fn create_img(
             .data
             .insert("battery".to_string(), battery.to_string());
     }
-    state.image = ui::render_ui(&state.ui, state.data.clone())?;
+    state.image = ui::render_ui(&mut state.ui, state.data.clone())?;
 
     state.image_name = img_name.clone();
 

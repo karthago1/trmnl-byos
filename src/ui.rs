@@ -1,22 +1,23 @@
 use std::{
-    cell::OnceCell,
     collections::HashMap,
     io::{BufWriter, Cursor},
 };
 
 use ::png::{BitDepth, ColorType, Encoder};
-use ab_glyph::{FontRef, PxScale};
 use image::{Pixel, Rgb, RgbImage};
 use imageproc::{
     definitions::Clamp,
-    drawing::{Canvas, draw_filled_rect_mut, draw_hollow_rect_mut, draw_text_mut, text_size},
+    drawing::{Canvas, draw_filled_rect_mut, draw_hollow_rect_mut},
     rect::Rect,
 };
 use serde::{Deserialize, Serialize};
 
-const FONT_BYTE: &[u8] = include_bytes!("../data/0xProtoNerdFont-Regular.ttf");
+mod table;
+pub use table::*;
+mod text;
+pub use text::*;
 
-#[derive(clap::Args, Deserialize, Clone, Debug)]
+#[derive(clap::Args, Deserialize, Clone, Debug, Default)]
 pub struct Size {
     /// width of the image
     #[arg(short, long, default_value_t = 800)]
@@ -26,13 +27,14 @@ pub struct Size {
     height: u32,
 }
 
-#[derive(Deserialize, Clone, Copy, Debug, Serialize)]
+#[derive(Deserialize, Clone, Copy, Debug, Serialize, Default)]
 pub enum Value {
-    Relative(f64),
-    Absolute(u32),
+    #[default]
     Min,
     Max,
     Center,
+    Relative(f64),
+    Absolute(u32),
 }
 
 impl Value {
@@ -47,18 +49,10 @@ impl Value {
     }
 }
 
-#[derive(Deserialize, Clone, Debug, Serialize)]
+#[derive(Deserialize, Clone, Debug, Serialize, Default)]
 pub struct Position {
     pub x: Value,
     pub y: Value,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct Text {
-    pub text: String,
-    #[serde(flatten)]
-    pub pos: Position,
-    pub size: f32,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -96,6 +90,19 @@ impl Rectangle {
 
         Rect::at(x as i32, y as i32).of_size(width, height)
     }
+
+    pub fn draw<C>(&self, area: &Area, brush: C::Pixel, image: &mut C)
+    where
+        C: Canvas,
+        <C::Pixel as Pixel>::Subpixel: Into<f32> + Clamp<f32>,
+    {
+        let rect = self.get(&area);
+        if self.fill {
+            draw_filled_rect_mut(image, rect, brush);
+        } else {
+            draw_hollow_rect_mut(image, rect, brush);
+        }
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -106,6 +113,7 @@ pub struct Section {
     pub width: Value,
     pub items: Vec<Item>,
 }
+
 impl Section {
     fn to_area(&self, area: &Area) -> Area {
         let width = self.width.get(area.width, 0);
@@ -124,6 +132,35 @@ impl Section {
 pub enum Item {
     Text(Text),
     Rectangle(Rectangle),
+    Table(Table),
+    TextTable(TextTable),
+    Empty,
+}
+
+impl Item {
+    fn size(&self) -> Size {
+        match self {
+            Item::Text(text) => text.final_size(),
+            Item::Rectangle(rectangle) => todo!(),
+            Item::Empty => Size::default(),
+            Item::Table(table) => todo!(),
+            Item::TextTable(text_table) => todo!(),
+        }
+    }
+
+    pub fn draw<C>(&self, area: &Area, brush: C::Pixel, image: &mut C)
+    where
+        C: Canvas,
+        <C::Pixel as Pixel>::Subpixel: Into<f32> + Clamp<f32>,
+    {
+        match self {
+            Item::Text(text) => text.draw(area, brush, image),
+            Item::Rectangle(rectangle) => rectangle.draw(area, brush, image),
+            Item::Table(table) => table.draw(area, brush, image),
+            Item::Empty => (),
+            Item::TextTable(text_table) => text_table.draw(area, brush, image),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -152,46 +189,34 @@ impl Position {
     }
 }
 
-fn draw_text<C>(
-    item: &Text,
-    area: &Area,
-    brush: C::Pixel,
-    data: &HashMap<String, String>,
-    image: &mut C,
-    font: &FontRef<'_>,
-) where
+pub fn call_pre_draw(items: &mut [Item], data: &HashMap<String, String>) {
+    for item in items.iter_mut() {
+        match item {
+            Item::Text(text) => text.pre_draw(data),
+            Item::Table(table) => table.pre_draw(data),
+            Item::TextTable(table) => table.pre_draw(data),
+            _ => (),
+        }
+    }
+}
+
+pub fn call_draw<C>(items: &mut [Item], area: &Area, brush: C::Pixel, image: &mut C)
+where
     C: Canvas,
     <C::Pixel as Pixel>::Subpixel: Into<f32> + Clamp<f32>,
 {
-    let scale = PxScale {
-        x: item.size,
-        y: item.size,
-    };
-
-    let mut text = item.text.clone();
-    for (key, value) in data.iter() {
-        let key = format!("{{{key}}}");
-        text = text.replace(&key, value);
+    for item in items.iter() {
+        match item {
+            Item::Text(text) => text.draw(&area, brush, image),
+            Item::Rectangle(rectangle) => rectangle.draw(area, brush, image),
+            Item::Table(table) => table.draw(&area, brush, image),
+            Item::Empty => (),
+            Item::TextTable(text_table) => text_table.draw(&area, brush, image),
+        }
     }
-    let (w, h) = text_size(scale, &font, &text);
-    let (x, y) = item.pos.get(
-        area,
-        &Size {
-            width: w,
-            height: h,
-        },
-    );
-    println!("text to draw at ({x}, {y})");
-    draw_text_mut(image, brush, x as i32, y as i32, scale, &font, &text);
 }
 
-pub fn render_ui(ui: &Ui, data: HashMap<String, String>) -> anyhow::Result<Vec<u8>> {
-    let font_cell = OnceCell::new();
-    let font = font_cell.get_or_init(|| {
-        println!("font initialized");
-        FontRef::try_from_slice(FONT_BYTE).expect("failed to parse font")
-    });
-
+pub fn render_ui(ui: &mut Ui, data: HashMap<String, String>) -> anyhow::Result<Vec<u8>> {
     let mut image = RgbImage::new(ui.width, ui.height);
     image.fill(255u8);
 
@@ -204,22 +229,11 @@ pub fn render_ui(ui: &Ui, data: HashMap<String, String>) -> anyhow::Result<Vec<u
 
     let brush = Rgb([0u8, 0u8, 0u8]);
 
-    for section in ui.sections.iter() {
+    for section in ui.sections.iter_mut() {
         let area = section.to_area(&area);
         println!("area to draw {area:?}");
-        for item in section.items.iter() {
-            match item {
-                Item::Text(text) => draw_text(text, &area, brush, &data, &mut image, font),
-                Item::Rectangle(rectangle) => {
-                    let rect = rectangle.get(&area);
-                    if rectangle.fill {
-                        draw_filled_rect_mut(&mut image, rect, brush);
-                    } else {
-                        draw_hollow_rect_mut(&mut image, rect, brush);
-                    }
-                }
-            }
-        }
+        call_pre_draw(&mut section.items, &data);
+        call_draw(&mut section.items, &area, brush, &mut image);
     }
 
     for rectangle in ui.rectangles.iter() {
@@ -265,7 +279,7 @@ fn save_monochrome_png(img: &RgbImage) -> anyhow::Result<Vec<u8>> {
             // Set the bit for white pixels.
 
             let sum: usize = pixel.0.iter().map(|v| *v as usize).sum();
-            if sum >= (128 * 3) {
+            if sum >= (200 * 3) {
                 packed[byte_index] |= 1 << bit_index;
             }
         }
