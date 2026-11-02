@@ -4,7 +4,7 @@ use std::{
 };
 
 use ::png::{BitDepth, ColorType, Encoder};
-use image::{Pixel, Rgb, RgbImage};
+use image::{DynamicImage, EncodableLayout, Pixel, Rgb, RgbImage};
 use imageproc::{
     definitions::Clamp,
     drawing::{Canvas, draw_filled_rect_mut, draw_hollow_rect_mut},
@@ -251,52 +251,19 @@ pub fn render_ui(ui: &mut Ui, data: HashMap<String, String>) -> anyhow::Result<V
     //     draw_line_segment_mut(&mut image, start, end, brush);
     // }
 
-    save_monochrome_png(&image)
-}
-
-fn save_monochrome_png(img: &RgbImage) -> anyhow::Result<Vec<u8>> {
-    let width = img.width();
-    let height = img.height();
-
-    // Each row contains 1 bit per pixel.
-    // PNG rows are padded to a whole number of bytes.
-    let row_bytes = (width as usize + 7) / 8;
-
-    let mut packed = vec![0u8; row_bytes * height as usize];
-
-    for y in 0..height {
-        for x in 0..width {
-            let pixel = img.get_pixel(x, y);
-
-            let byte_index = y as usize * row_bytes + (x / 8) as usize;
-
-            let bit_index = 7 - (x % 8);
-
-            // PNG 1-bit grayscale:
-            // 0 = black
-            // 1 = white
-            //
-            // Set the bit for white pixels.
-
-            let sum: usize = pixel.0.iter().map(|v| *v as usize).sum();
-            if sum >= (200 * 3) {
-                packed[byte_index] |= 1 << bit_index;
-            }
-        }
-    }
+    let img = DynamicImage::ImageRgb8(image).to_luma8();
 
     let mut buf = Vec::<u8>::new();
     let buffer = Cursor::new(&mut buf);
     let writer = BufWriter::new(buffer);
 
-    let mut encoder = Encoder::new(writer, width, height);
+    let mut encoder = Encoder::new(writer, img.width(), img.height());
 
     encoder.set_color(ColorType::Grayscale);
-    encoder.set_depth(BitDepth::One);
+    encoder.set_depth(BitDepth::Eight);
 
     let mut png_writer = encoder.write_header()?;
-    png_writer.write_image_data(&packed)?;
+    png_writer.write_image_data(&img.as_bytes())?;
     png_writer.finish()?;
-
     Ok(buf)
 }
