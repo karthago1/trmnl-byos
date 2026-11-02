@@ -53,7 +53,7 @@ impl Text {
             text = text.replace(&key, value);
         }
         self.final_text = text;
-        let (w, h) = FONT.with(|font| text_size(scale, &font, &self.text));
+        let (w, h) = FONT.with(|font| text_size(scale, &font, &self.final_text));
         self.final_size.width = w;
         self.final_size.height = h;
     }
