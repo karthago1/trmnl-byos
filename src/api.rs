@@ -68,6 +68,9 @@ pub struct DisplayResponse {
     pub reset_firmware: bool,
 
     pub special_function: String,
+
+    pub action: String,
+
     pub maximum_compatibility: bool,
 
     pub temperature_profile: String,
@@ -90,8 +93,9 @@ impl DisplayResponse {
             refresh_rate: "60".to_string(),
             reset_firmware: false,
             maximum_compatibility: false,
-            temperature_profile: "a".to_string(),
+            temperature_profile: "default".to_string(),
             special_function: "none".to_string(),
+            action: "none".to_string(),
         }
     }
 
@@ -99,6 +103,36 @@ impl DisplayResponse {
     #[must_use]
     pub fn with_refresh_rate(mut self, seconds: u32) -> Self {
         self.refresh_rate = seconds.to_string();
+        self
+    }
+
+    #[must_use]
+    pub fn with_special_function(mut self, value: &str) -> Self {
+        self.special_function = if value.is_empty() {
+            "none".to_string()
+        } else {
+            value.to_string()
+        };
+        self
+    }
+
+    #[must_use]
+    pub fn with_action(mut self, value: &str) -> Self {
+        self.action = if value.is_empty() {
+            "none".to_string()
+        } else {
+            value.to_string()
+        };
+        self
+    }
+
+    #[must_use]
+    pub fn with_temperature_profile(mut self, value: &str) -> Self {
+        self.temperature_profile = if value.is_empty() {
+            "default".into()
+        } else {
+            value.to_string()
+        };
         self
     }
 }
@@ -201,7 +235,11 @@ pub async fn display(
             match create_img(&mut state, addr.local, Some(bat)) {
                 Ok((url, img_name)) => {
                     return Json(
-                        DisplayResponse::new(url, img_name).with_refresh_rate(state.refresh_time_s),
+                        DisplayResponse::new(url, img_name)
+                            .with_refresh_rate(state.refresh_time_s)
+                            .with_special_function(&state.special_function)
+                            .with_action(&state.action)
+                            .with_temperature_profile(&state.temperature_profile),
                     );
                 }
                 Err(err) => {
@@ -251,6 +289,9 @@ pub struct UpdateImageReq {
     pub ui: Ui,
     pub data: HashMap<String, String>,
     pub refresh_time_s: u32,
+    pub action: String,
+    pub special_function: String,
+    pub temperature_profile: String,
 }
 
 /// POST /api/update_image
@@ -263,6 +304,9 @@ pub async fn update_image(
             state.ui = req.ui;
             state.data = req.data;
             state.refresh_time_s = req.refresh_time_s;
+            state.special_function = req.special_function;
+            state.action = req.action;
+            state.temperature_profile = req.temperature_profile;
 
             UpdateImageResponse {
                 status: 1,

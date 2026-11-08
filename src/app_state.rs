@@ -18,7 +18,11 @@ pub struct AppState {
     pub welcome_image: Vec<u8>,
     pub image_name: String,
     pub welcome_image_name: String,
+    pub special_function: String,
+    pub action: String,
+    pub temperature_profile: String,
 }
+
 impl AppState {
     pub fn new() -> Self {
         Self {
@@ -34,6 +38,9 @@ impl AppState {
                 rectangles: Vec::new(),
             },
             data: Default::default(),
+            special_function: "none".to_string(),
+            action: "none".to_string(),
+            temperature_profile: "default".to_string(),
         }
     }
 }

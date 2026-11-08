@@ -64,7 +64,6 @@ async fn main() {
         .route("/api/update_image", axum::routing::post(update_image))
         .route("/api/img/{id}", get(download))
         .with_state(Arc::new(Mutex::new(AppState::new())));
-    // .nest_service("/img", ServeDir::new(args.img_dir));
 
     let listener = tokio::net::TcpListener::bind(args.addr).await.unwrap();
     axum::serve(

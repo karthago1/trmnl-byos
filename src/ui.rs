@@ -96,7 +96,7 @@ impl Rectangle {
         C: Canvas,
         <C::Pixel as Pixel>::Subpixel: Into<f32> + Clamp<f32>,
     {
-        let rect = self.get(&area);
+        let rect = self.get(area);
         if self.fill {
             draw_filled_rect_mut(image, rect, brush);
         } else {
@@ -207,11 +207,11 @@ where
 {
     for item in items.iter() {
         match item {
-            Item::Text(text) => text.draw(&area, brush, image),
+            Item::Text(text) => text.draw(area, brush, image),
             Item::Rectangle(rectangle) => rectangle.draw(area, brush, image),
-            Item::Table(table) => table.draw(&area, brush, image),
+            Item::Table(table) => table.draw(area, brush, image),
             Item::Empty => (),
-            Item::TextTable(text_table) => text_table.draw(&area, brush, image),
+            Item::TextTable(text_table) => text_table.draw(area, brush, image),
         }
     }
 }
@@ -231,7 +231,6 @@ pub fn render_ui(ui: &mut Ui, data: HashMap<String, String>) -> anyhow::Result<V
 
     for section in ui.sections.iter_mut() {
         let area = section.to_area(&area);
-        println!("area to draw {area:?}");
         call_pre_draw(&mut section.items, &data);
         call_draw(&mut section.items, &area, brush, &mut image);
     }
@@ -263,7 +262,7 @@ pub fn render_ui(ui: &mut Ui, data: HashMap<String, String>) -> anyhow::Result<V
     encoder.set_depth(BitDepth::Eight);
 
     let mut png_writer = encoder.write_header()?;
-    png_writer.write_image_data(&img.as_bytes())?;
+    png_writer.write_image_data(img.as_bytes())?;
     png_writer.finish()?;
     Ok(buf)
 }

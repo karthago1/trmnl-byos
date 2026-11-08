@@ -120,7 +120,6 @@ impl Table {
                 };
 
                 item.draw(&area, brush, image);
-                println!("{area:?}");
                 item_x += area.width + self.spacing;
                 i += 1;
             }
